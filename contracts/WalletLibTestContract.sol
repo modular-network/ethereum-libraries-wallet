@@ -82,7 +82,7 @@ contract WalletLibTestContract {
     return wallet.getTransactionLength(_id);
   }
 
-  function transactionConfirms(bytes32 _id, uint256 _txIndex) public view returns (uint256[50]) {
+  function transactionConfirms(bytes32 _id, uint256 _txIndex) public view returns (address[50]) {
     return wallet.getTransactionConfirms(_id, _txIndex);
   }
 

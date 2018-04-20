@@ -185,8 +185,7 @@ library WalletAdminLib {
         }
       }
       // add the sender to the list of confirmed owners and update the confirm count
-      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
-      self.transactionInfo[_id][_txIndex].confirmCount++;
+      self.transactionInfo[_id][_txIndex].confirmedOwners[msg.sender] = true;
     } else {
       // this means the contract sent it
       _txIndex--;
@@ -228,8 +227,7 @@ library WalletAdminLib {
       }
     }
 
-    if(self.transactionInfo[_id][_txIndex].confirmCount ==
-       self.transactionInfo[_id][_txIndex].confirmRequired)
+    if(self.checkConfirmationsComplete(_id,_txIndex))
     {
       self.transactionInfo[_id][_txIndex].success = true;
       uint256 i = self.ownerIndex[_from];
@@ -277,8 +275,7 @@ library WalletAdminLib {
       }
     }
 
-    if(self.transactionInfo[_id][_txIndex].confirmCount ==
-       self.transactionInfo[_id][_txIndex].confirmRequired)
+    if(self.checkConfirmationsComplete(_id,_txIndex))
     {
       self.transactionInfo[_id][_txIndex].success = true;
       self.owners.push(_newOwner);
@@ -324,8 +321,7 @@ library WalletAdminLib {
       }
     }
 
-    if(self.transactionInfo[_id][_txIndex].confirmCount ==
-       self.transactionInfo[_id][_txIndex].confirmRequired)
+    if(self.checkConfirmationsComplete(_id,_txIndex))
     {
       self.transactionInfo[_id][_txIndex].success = true;
       self.owners[self.ownerIndex[_ownerRemoving]] = self.owners[self.owners.length - 1];
@@ -373,8 +369,7 @@ library WalletAdminLib {
       }
     }
 
-    if(self.transactionInfo[_id][_txIndex].confirmCount ==
-      self.transactionInfo[_id][_txIndex].confirmRequired)
+    if(self.checkConfirmationsComplete(_id,_txIndex))
     {
       self.transactionInfo[_id][_txIndex].success = true;
       self.requiredAdmin = _requiredAdmin;
@@ -419,8 +414,7 @@ library WalletAdminLib {
       }
     }
 
-    if(self.transactionInfo[_id][_txIndex].confirmCount ==
-       self.transactionInfo[_id][_txIndex].confirmRequired)
+    if(self.checkConfirmationsComplete(_id,_txIndex))
     {
       self.transactionInfo[_id][_txIndex].success = true;
       self.requiredMajor = _requiredMajor;
@@ -465,8 +459,7 @@ library WalletAdminLib {
       }
     }
 
-    if(self.transactionInfo[_id][_txIndex].confirmCount ==
-       self.transactionInfo[_id][_txIndex].confirmRequired)
+    if(self.checkConfirmationsComplete(_id,_txIndex))
     {
       self.transactionInfo[_id][_txIndex].success = true;
       self.requiredMinor = _requiredMinor;
@@ -513,8 +506,7 @@ library WalletAdminLib {
       }
     }
 
-    if(self.transactionInfo[_id][_txIndex].confirmCount ==
-       self.transactionInfo[_id][_txIndex].confirmRequired)
+    if(self.checkConfirmationsComplete(_id,_txIndex))
     {
       self.transactionInfo[_id][_txIndex].success = true;
       self.majorThreshold[_token] = _majorThreshold;
