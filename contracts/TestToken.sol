@@ -14,7 +14,7 @@ contract TestToken {
 
   TokenLib.TokenStorage token;
 
-  function TestToken(
+  constructor(
                 address _owner,
                 string _name,
                 string _symbol,

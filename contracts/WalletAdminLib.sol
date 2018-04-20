@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.23;
 
 /**
  * @title Wallet Admin Library
@@ -32,6 +32,12 @@ import "./WalletMainLib.sol";
 
 library WalletAdminLib {
   using WalletMainLib for WalletMainLib.WalletData;
+
+  uint256 constant CHANGEOWNER = 1;
+  uint256 constant ADDOWNER = 2;
+  uint256 constant REMOVEOWNER = 3;
+  uint256 constant CHANGEREQUIRED = 4;
+  uint256 constant CHANGETHRESHOLD = 5;
 
   /*Events*/
   event LogTransactionConfirmed(bytes32 txid, address sender, uint256 confirmsNeeded);
@@ -117,13 +123,76 @@ library WalletAdminLib {
     return true;
   }
 
-  /*Utility Functions*/
+  /// @dev adds/removes confirmations for new or existing transactions
+  /// @param _checkID The ID of the type of transaction
+  /// @param _confirm bool that shows if the owner is confirming or revoking the transaction
+  /// @param _id  ID hash of the transaction and parameters
+  /// @param _from address being removed as an owner
+  /// @param _to either the address being added as an owner or the new number of confirmations/threshold. Had to combine the two because of stack depth issues
+  function updateAdminConfirms(WalletMainLib.WalletData storage self, 
+                        uint256 _checkID, 
+                        bool _confirm, 
+                        bytes32 _id, 
+                        address _from, 
+                        address _to) private returns (bool,uint256) 
+  {
+    uint256 _txIndex = self.transactionInfo[_id].length;
+    bool allGood;
+    // ensure that it is a valid transaction type
+    require((_checkID > 0) && (_checkID <= 5));
 
-  /// @dev Used later to calculate the number of confirmations needed for tx
-  /// @param _required Number of sigs required
-  /// @param _count Current number of sigs
-  function calcConfirmsNeeded(uint256 _required, uint256 _count) private pure returns (uint256) {
-    return _required - _count;
+    if(msg.sender != address(this)) {
+      // caller is an external address
+      if(!_confirm) {
+        //revoke the callers confirmation
+        allGood = self.revokeConfirm(_id);
+        return (allGood,_txIndex);
+      } else { // the caller is trying to confirm a new or existing change
+
+        // if it is a new transaction or if the last same transaction has already succeeded, (new transaction)
+        if(_txIndex == 0 || self.transactionInfo[_id][_txIndex - 1].success){
+          require(self.ownerIndex[msg.sender] > 0);  // require that the sender is an owner
+          
+          if (_checkID == CHANGEOWNER) {
+            //require(_to != 0);
+            allGood = checkChangeOwnerArgs(self.ownerIndex[_from], self.ownerIndex[_to]);
+          } else if (_checkID == ADDOWNER) {
+            require(_to != 0);
+            allGood = checkNewOwnerArgs(self.ownerIndex[_to],
+                                        self.owners.length,
+                                        self.maxOwners);
+          } else if (_checkID == REMOVEOWNER) {
+            allGood = checkRemoveOwnerArgs(self.ownerIndex[_from],
+                                           self.owners.length,
+                                           self.requiredAdmin);
+          } else if (_checkID == CHANGEREQUIRED) {
+            allGood = checkRequiredChange(uint256(_to), self.owners.length);
+          }
+
+          if((_checkID != CHANGETHRESHOLD) && (!allGood)) {
+            return (false,0);
+          }
+
+          self.transactionInfo[_id].length++;  // add the new transaction
+          self.transactionInfo[_id][_txIndex].confirmRequired = self.requiredAdmin;  // set the number of required signatures
+          self.transactionInfo[_id][_txIndex].day = now / 1 days;   // set the date of the transaction
+          self.transactions[now / 1 days].push(_id);  // add this transaction to the day's record
+        } else { // means this is an existing transaction
+          _txIndex--;
+          allGood = self.checkNotConfirmed(_id, _txIndex);  // check that the sender has not already confirmed
+          if(!allGood)
+            return (false,0);
+        }
+      }
+      // add the sender to the list of confirmed owners and update the confirm count
+      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
+      self.transactionInfo[_id][_txIndex].confirmCount++;
+    } else {
+      // this means the contract sent it
+      _txIndex--;
+    }
+
+    return (true,_txIndex);
   }
 
   /*Administrative Functions*/
@@ -145,35 +214,18 @@ library WalletAdminLib {
                        returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeOwner",_from,_to);
-    uint256 _txIndex = self.transactionInfo[_id].length;
+    uint256 _txIndex;
     bool allGood;
 
-    if(msg.sender != address(this)){
+    (allGood,_txIndex) = updateAdminConfirms(self,CHANGEOWNER,_confirm,_id,_from,_to);
+    if(msg.sender != address(this)) {
       if(!_confirm) {
-        allGood = self.revokeConfirm(_id);
         return (allGood,_id);
       } else {
-        if(_txIndex == 0 || self.transactionInfo[_id][_txIndex - 1].success){
-          require(self.ownerIndex[msg.sender] > 0);
-          allGood = checkChangeOwnerArgs(self.ownerIndex[_from], self.ownerIndex[_to]);
-          if(!allGood)
-            return (false,0);
-
-          self.transactionInfo[_id].length++;
-          self.transactionInfo[_id][_txIndex].confirmRequired = self.requiredAdmin;
-          self.transactionInfo[_id][_txIndex].day = now / 1 days;
-          self.transactions[now / 1 days].push(_id);
-        } else {
-          _txIndex--;
-          allGood = self.checkNotConfirmed(_id, _txIndex);
-          if(!allGood)
-            return (false,_id);
+        if (!allGood) {
+          return (false,_id);
         }
       }
-      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
-      self.transactionInfo[_id][_txIndex].confirmCount++;
-    } else {
-      _txIndex--;
     }
 
     if(self.transactionInfo[_id][_txIndex].confirmCount ==
@@ -187,13 +239,10 @@ library WalletAdminLib {
       delete self.transactionInfo[_id][_txIndex].data;
       emit LogOwnerChanged(_from, _to);
     } else {
-      if(self.transactionInfo[_id][_txIndex].data.length == 0)
+      if(self.transactionInfo[_id][_txIndex].data.length == 0) {
         self.transactionInfo[_id][_txIndex].data = _data;
-
-      uint256 confirmsNeeded = calcConfirmsNeeded(self.transactionInfo[_id][_txIndex].confirmRequired,
-                                               self.transactionInfo[_id][_txIndex].confirmCount);
-
-      emit LogTransactionConfirmed(_id, msg.sender, confirmsNeeded);
+    }
+      self.findConfirmsNeeded(_id, _txIndex);
     }
 
     return (true,_id);
@@ -214,40 +263,18 @@ library WalletAdminLib {
                     returns (bool,bytes32)
   {
     bytes32 _id = keccak256("addOwner",_newOwner);
-    uint256 _txIndex = self.transactionInfo[_id].length;
+    uint256 _txIndex;
     bool allGood;
 
-    if(msg.sender != address(this)){
-      require(_newOwner != 0);
-
+    (allGood,_txIndex) = updateAdminConfirms(self,ADDOWNER,_confirm,_id,0,_newOwner);
+    if(msg.sender != address(this)) {
       if(!_confirm) {
-        allGood = self.revokeConfirm(_id);
         return (allGood,_id);
       } else {
-        if(_txIndex == 0 || self.transactionInfo[_id][_txIndex - 1].success){
-          require(self.ownerIndex[msg.sender] > 0);
-          allGood = checkNewOwnerArgs(self.ownerIndex[_newOwner],
-                                      self.owners.length,
-                                      self.maxOwners);
-          if(!allGood)
-            return (false,0);
-
-          self.transactionInfo[_id].length++;
-          self.transactionInfo[_id][_txIndex].confirmRequired = self.requiredAdmin;
-          self.transactionInfo[_id][_txIndex].day = now / 1 days;
-          self.transactions[now / 1 days].push(_id);
-        } else {
-          _txIndex--;
-          allGood = self.checkNotConfirmed(_id, _txIndex);
-          if(!allGood)
-            return (false,_id);
+        if (!allGood) {
+          return (false,_id);
         }
       }
-
-      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
-      self.transactionInfo[_id][_txIndex].confirmCount++;
-    } else {
-      _txIndex--;
     }
 
     if(self.transactionInfo[_id][_txIndex].confirmCount ==
@@ -259,12 +286,10 @@ library WalletAdminLib {
       delete self.transactionInfo[_id][_txIndex].data;
       emit LogOwnerAdded(_newOwner);
     } else {
-      if(self.transactionInfo[_id][_txIndex].data.length == 0)
+      if(self.transactionInfo[_id][_txIndex].data.length == 0) {
         self.transactionInfo[_id][_txIndex].data = _data;
-
-      uint256 confirmsNeeded = calcConfirmsNeeded(self.transactionInfo[_id][_txIndex].confirmRequired,
-                                               self.transactionInfo[_id][_txIndex].confirmCount);
-      emit LogTransactionConfirmed(_id, msg.sender, confirmsNeeded);
+      }
+      self.findConfirmsNeeded(_id, _txIndex);
     }
 
     return (true,_id);
@@ -285,38 +310,18 @@ library WalletAdminLib {
                        returns (bool,bytes32)
   {
     bytes32 _id = keccak256("removeOwner",_ownerRemoving);
-    uint256 _txIndex = self.transactionInfo[_id].length;
+    uint256 _txIndex;
     bool allGood;
 
-    if(msg.sender != address(this)){
+    (allGood,_txIndex) = updateAdminConfirms(self,REMOVEOWNER,_confirm,_id,_ownerRemoving,0);
+    if(msg.sender != address(this)) {
       if(!_confirm) {
-        allGood = self.revokeConfirm(_id);
         return (allGood,_id);
       } else {
-        if(_txIndex == 0 || self.transactionInfo[_id][_txIndex - 1].success){
-          require(self.ownerIndex[msg.sender] > 0);
-          allGood = checkRemoveOwnerArgs(self.ownerIndex[_ownerRemoving],
-                                         self.owners.length,
-                                         self.requiredAdmin);
-          if(!allGood)
-            return (false,0);
-
-          self.transactionInfo[_id].length++;
-          self.transactionInfo[_id][_txIndex].confirmRequired = self.requiredAdmin;
-          self.transactionInfo[_id][_txIndex].day = now / 1 days;
-          self.transactions[now / 1 days].push(_id);
-        } else {
-          _txIndex--;
-          allGood = self.checkNotConfirmed(_id, _txIndex);
-          if(!allGood)
-            return (false,_id);
+        if (!allGood) {
+          return (false,_id);
         }
       }
-
-      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
-      self.transactionInfo[_id][_txIndex].confirmCount++;
-    } else {
-      _txIndex--;
     }
 
     if(self.transactionInfo[_id][_txIndex].confirmCount ==
@@ -330,12 +335,10 @@ library WalletAdminLib {
       delete self.transactionInfo[_id][_txIndex].data;
       emit LogOwnerRemoved(_ownerRemoving);
     } else {
-      if(self.transactionInfo[_id][_txIndex].data.length == 0)
+      if(self.transactionInfo[_id][_txIndex].data.length == 0) {
         self.transactionInfo[_id][_txIndex].data = _data;
-
-      uint256 confirmsNeeded = calcConfirmsNeeded(self.transactionInfo[_id][_txIndex].confirmRequired,
-                                               self.transactionInfo[_id][_txIndex].confirmCount);
-      emit LogTransactionConfirmed(_id, msg.sender, confirmsNeeded);
+      }
+      self.findConfirmsNeeded(_id, _txIndex);
     }
 
     return (true,_id);
@@ -356,37 +359,18 @@ library WalletAdminLib {
                                returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeRequiredAdmin",_requiredAdmin);
-    uint256 _txIndex = self.transactionInfo[_id].length;
+    uint256 _txIndex;
+    bool allGood;
 
-    if(msg.sender != address(this)){
-      bool allGood;
-
+    (allGood,_txIndex) = updateAdminConfirms(self,CHANGEREQUIRED,_confirm,_id,0,address(_requiredAdmin));
+    if(msg.sender != address(this)) {
       if(!_confirm) {
-        allGood = self.revokeConfirm(_id);
         return (allGood,_id);
       } else {
-        if(_txIndex == 0 || self.transactionInfo[_id][_txIndex - 1].success){
-          require(self.ownerIndex[msg.sender] > 0);
-          allGood = checkRequiredChange(_requiredAdmin, self.owners.length);
-          if(!allGood)
-            return (false,0);
-
-          self.transactionInfo[_id].length++;
-          self.transactionInfo[_id][_txIndex].confirmRequired = self.requiredAdmin;
-          self.transactionInfo[_id][_txIndex].day = now / 1 days;
-          self.transactions[now / 1 days].push(_id);
-        } else {
-          _txIndex--;
-          allGood = self.checkNotConfirmed(_id, _txIndex);
-          if(!allGood)
-            return (false,_id);
+        if (!allGood) {
+          return (false,_id);
         }
       }
-
-      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
-      self.transactionInfo[_id][_txIndex].confirmCount++;
-    } else {
-      _txIndex--;
     }
 
     if(self.transactionInfo[_id][_txIndex].confirmCount ==
@@ -397,12 +381,10 @@ library WalletAdminLib {
       delete self.transactionInfo[_id][_txIndex].data;
       emit LogRequirementChange(_requiredAdmin);
     } else {
-      if(self.transactionInfo[_id][_txIndex].data.length == 0)
+      if(self.transactionInfo[_id][_txIndex].data.length == 0) {
         self.transactionInfo[_id][_txIndex].data = _data;
-
-      uint256 confirmsNeeded = calcConfirmsNeeded(self.transactionInfo[_id][_txIndex].confirmRequired,
-                                               self.transactionInfo[_id][_txIndex].confirmCount);
-      emit LogTransactionConfirmed(_id, msg.sender, confirmsNeeded);
+      }
+      self.findConfirmsNeeded(_id, _txIndex);
     }
 
     return (true,_id);
@@ -423,37 +405,18 @@ library WalletAdminLib {
                                returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeRequiredMajor",_requiredMajor);
-    uint256 _txIndex = self.transactionInfo[_id].length;
+    uint256 _txIndex;
+    bool allGood;
 
-    if(msg.sender != address(this)){
-      bool allGood;
-
+    (allGood,_txIndex) = updateAdminConfirms(self,CHANGEREQUIRED,_confirm,_id,0,address(_requiredMajor));
+    if(msg.sender != address(this)) {
       if(!_confirm) {
-        allGood = self.revokeConfirm(_id);
         return (allGood,_id);
       } else {
-        if(_txIndex == 0 || self.transactionInfo[_id][_txIndex - 1].success){
-          require(self.ownerIndex[msg.sender] > 0);
-          allGood = checkRequiredChange(_requiredMajor, self.owners.length);
-          if(!allGood)
-            return (false,0);
-
-          self.transactionInfo[_id].length++;
-          self.transactionInfo[_id][_txIndex].confirmRequired = self.requiredAdmin;
-          self.transactionInfo[_id][_txIndex].day = now / 1 days;
-          self.transactions[now / 1 days].push(_id);
-        } else {
-          _txIndex--;
-          allGood = self.checkNotConfirmed(_id, _txIndex);
-          if(!allGood)
-            return (false,_id);
+        if (!allGood) {
+          return (false,_id);
         }
       }
-
-      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
-      self.transactionInfo[_id][_txIndex].confirmCount++;
-    } else {
-      _txIndex--;
     }
 
     if(self.transactionInfo[_id][_txIndex].confirmCount ==
@@ -464,12 +427,10 @@ library WalletAdminLib {
       delete self.transactionInfo[_id][_txIndex].data;
       emit LogRequirementChange(_requiredMajor);
     } else {
-      if(self.transactionInfo[_id][_txIndex].data.length == 0)
+      if(self.transactionInfo[_id][_txIndex].data.length == 0) {
         self.transactionInfo[_id][_txIndex].data = _data;
-
-      uint256 confirmsNeeded = calcConfirmsNeeded(self.transactionInfo[_id][_txIndex].confirmRequired,
-                                               self.transactionInfo[_id][_txIndex].confirmCount);
-      emit LogTransactionConfirmed(_id, msg.sender, confirmsNeeded);
+      }
+      self.findConfirmsNeeded(_id, _txIndex);
     }
 
     return (true,_id);
@@ -490,37 +451,18 @@ library WalletAdminLib {
                                returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeRequiredMinor",_requiredMinor);
-    uint256 _txIndex = self.transactionInfo[_id].length;
+    uint256 _txIndex;
+    bool allGood;
 
-    if(msg.sender != address(this)){
-      bool allGood;
-
+    (allGood,_txIndex) = updateAdminConfirms(self,CHANGEREQUIRED,_confirm,_id,0,address(_requiredMinor));
+    if(msg.sender != address(this)) {
       if(!_confirm) {
-        allGood = self.revokeConfirm(_id);
         return (allGood,_id);
       } else {
-        if(_txIndex == 0 || self.transactionInfo[_id][_txIndex - 1].success){
-          require(self.ownerIndex[msg.sender] > 0);
-          allGood = checkRequiredChange(_requiredMinor, self.owners.length);
-          if(!allGood)
-            return (false,0);
-
-          self.transactionInfo[_id].length++;
-          self.transactionInfo[_id][_txIndex].confirmRequired = self.requiredAdmin;
-          self.transactionInfo[_id][_txIndex].day = now / 1 days;
-          self.transactions[now / 1 days].push(_id);
-        } else {
-          _txIndex--;
-          allGood = self.checkNotConfirmed(_id, _txIndex);
-          if(!allGood)
-            return (false,_id);
+        if (!allGood) {
+          return (false,_id);
         }
       }
-
-      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
-      self.transactionInfo[_id][_txIndex].confirmCount++;
-    } else {
-      _txIndex--;
     }
 
     if(self.transactionInfo[_id][_txIndex].confirmCount ==
@@ -531,12 +473,10 @@ library WalletAdminLib {
       delete self.transactionInfo[_id][_txIndex].data;
       emit LogRequirementChange(_requiredMinor);
     } else {
-      if(self.transactionInfo[_id][_txIndex].data.length == 0)
+      if(self.transactionInfo[_id][_txIndex].data.length == 0) {
         self.transactionInfo[_id][_txIndex].data = _data;
-
-      uint256 confirmsNeeded = calcConfirmsNeeded(self.transactionInfo[_id][_txIndex].confirmRequired,
-                                               self.transactionInfo[_id][_txIndex].confirmCount);
-      emit LogTransactionConfirmed(_id, msg.sender, confirmsNeeded);
+      }
+      self.findConfirmsNeeded(_id, _txIndex);
     }
 
     return (true,_id);
@@ -559,34 +499,18 @@ library WalletAdminLib {
                                 returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeMajorThreshold", _token, _majorThreshold);
-    uint256 _txIndex = self.transactionInfo[_id].length;
+    uint256 _txIndex;
+    bool allGood;
 
-    if(msg.sender != address(this)){
-      bool allGood;
-
+    (allGood,_txIndex) = updateAdminConfirms(self,CHANGETHRESHOLD,_confirm,_id,0,0);
+    if(msg.sender != address(this)) {
       if(!_confirm) {
-        allGood = self.revokeConfirm(_id);
         return (allGood,_id);
       } else {
-        if(_txIndex == 0 || self.transactionInfo[_id][_txIndex - 1].success){
-          require(self.ownerIndex[msg.sender] > 0);
-
-          self.transactionInfo[_id].length++;
-          self.transactionInfo[_id][_txIndex].confirmRequired = self.requiredAdmin;
-          self.transactionInfo[_id][_txIndex].day = now / 1 days;
-          self.transactions[now / 1 days].push(_id);
-        } else {
-          _txIndex--;
-          allGood = self.checkNotConfirmed(_id, _txIndex);
-          if(!allGood)
-            return (false,_id);
+        if (!allGood) {
+          return (false,_id);
         }
       }
-
-      self.transactionInfo[_id][_txIndex].confirmedOwners.push(uint256(msg.sender));
-      self.transactionInfo[_id][_txIndex].confirmCount++;
-    } else {
-      _txIndex--;
     }
 
     if(self.transactionInfo[_id][_txIndex].confirmCount ==
@@ -597,12 +521,10 @@ library WalletAdminLib {
       delete self.transactionInfo[_id][_txIndex].data;
       emit LogThresholdChange(_token, _majorThreshold);
     } else {
-      if(self.transactionInfo[_id][_txIndex].data.length == 0)
+      if(self.transactionInfo[_id][_txIndex].data.length == 0) {
         self.transactionInfo[_id][_txIndex].data = _data;
-
-      uint256 confirmsNeeded = calcConfirmsNeeded(self.transactionInfo[_id][_txIndex].confirmRequired,
-                                               self.transactionInfo[_id][_txIndex].confirmCount);
-      emit LogTransactionConfirmed(_id, msg.sender, confirmsNeeded);
+      }
+      self.findConfirmsNeeded(_id, _txIndex);
     }
 
     return (true,_id);

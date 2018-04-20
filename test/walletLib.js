@@ -31,8 +31,10 @@ contract('WalletLibTestContract', (accounts) => {
     const changeOwnerAccount0 = await contract.changeOwner("0x36994c7cff11859ba8b9715120a68aa9499329ee",
                            "0x0deef860f84a5298ccbc8a56f32f6ce49a236c8e",
                            true, { from: accounts[0] });
+    
     const changeOwnerAccount0Id = ""+changeOwnerAccount0.logs[0].args.txid+"";
     const revokeConfirm = await contract.revokeConfirm(changeOwnerAccount0Id, {from:accounts[1]});
+    
 
     const firstTransactionLength = await contract.transactionLength(changeOwnerAccount0Id);
     const checkNotConfirmed = await contract.checkNotConfirmed("0x741c8986816d4c662739c411feb37b739f5f3dbd78850ee68032682a5912ba57", firstTransactionLength.valueOf() - 1, {from:accounts[1]});
@@ -45,7 +47,9 @@ contract('WalletLibTestContract', (accounts) => {
     await contract.changeOwner("0x36994c7cff11859ba8b9715120a68aa9499329ee",
                            "0x0deef860f84a5298ccbc8a56f32f6ce49a236c8e",
                            true, {from: accounts[2]});
+    
     await contract.revokeConfirm(changeOwnerAccount0Id, {from:accounts[2]});
+    
     const secondTransactionLenght = await contract.transactionLength(changeOwnerAccount0Id);
     const secondTransactionConfirmCount = await contract.transactionConfirmCount(changeOwnerAccount0Id, secondTransactionLenght - 1);
 
