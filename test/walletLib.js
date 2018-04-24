@@ -507,6 +507,69 @@ contract('WalletLibTestContract', (accounts) => {
     assert.equal(addressBalance.valueOf(), 3, "3 tokens should be transferred to accounts[5] after 4 sigs");
 
   });
+
+  // it("should not allow major transactions to be replayed as minor transactions", async () => {
+
+  //   const contract = await WalletLibTestContract.deployed();
+  //   const testToken = await TestToken.deployed();
+
+  //   const testTokenAddress = ""+testToken.address+"";
+  //   const accountsBalance = await web3.eth.getBalance(accounts[5]);
+  //   const initialBalance = Math.floor(accountsBalance.valueOf()/10**18);
+  //   await contract.sendTransaction({value: 100000000000000000000, from: accounts[5]});
+  //   const secondAccountsBalance = await web3.eth.getBalance(accounts[5]);
+  //   const firstRealBalance = initialBalance - Math.floor(secondAccountsBalance.valueOf()/10**18);
+
+  //   const accountServeTx = await contract.serveTx(accounts[5], 60000000000000000005, 0, true, {from: accounts[5]});
+  //   const accountServeTxId = ""+accountServeTx.logs[0].args.txid+"";
+  //   const accountServeTxIdLength = await contract.transactionLength(accountServeTxId);
+
+  //   await contract.confirmTx(accountServeTxId, {from:accounts[2]});
+  //   await contract.serveTx(accounts[5], 60000000000000000005, 0, false, {from: accounts[2]});
+  //   const serveConfirms = await contract.transactionConfirmCount(accountServeTxId, accountServeTxIdLength.valueOf() - 1);
+  //   await contract.serveTx(accounts[5], 60000000000000000005, 0, true, {from: accounts[2]});
+  //   const serveConfirmsAfterReConfirm = await contract.transactionConfirmCount(accountServeTxId, accountServeTxIdLength.valueOf() - 1);
+
+  //   const thirdAccountsBalance = await web3.eth.getBalance(accounts[5]);
+  //   const thirdRealBalance = initialBalance - Math.floor(thirdAccountsBalance.valueOf()/10**18);
+
+  //   await contract.confirmTx(accountServeTxId, {from:accounts[3]});
+  //   const confirmed = await contract.confirmTx(accountServeTxId, {from:accounts[1]});
+  //   const executedCalldata = confirmed.logs[0].args.data;
+
+  //   const fourthAccountsBalance = await web3.eth.getBalance(accounts[5]);
+  //   const fourthRealBalance = initialBalance - Math.floor(fourthAccountsBalance.valueOf()/10**18);
+
+  //   const accountServeTx = await contract.serveTx(contract.address, 0, executedCalldata, true, {from: accounts[5]});
+
+    // const testTokenTransferRequest = await testToken.transfer.request(accounts[5], 5);
+    // const testTokenTransferRequestData = testTokenTransferRequest.params[0].data;
+    // const testTokenServeTx = await contract.serveTx(testTokenAddress, 0, ""+testTokenTransferRequestData+"", true, {from: accounts[0]});
+    // const testTokenServeTxId = ""+testTokenServeTx.logs[0].args.txid+"";
+    // await contract.revokeConfirm(testTokenServeTxId, {from:accounts[2]});
+    // const testTokenServeTxTransactionLenght = await contract.transactionLength(testTokenServeTxId);
+    // const testTokenTransactionConfirmCount = await contract.transactionConfirmCount(testTokenServeTxId, testTokenServeTxTransactionLenght.valueOf() - 1);
+
+    // await contract.serveTx(testTokenAddress, 0, ""+testTokenTransferRequestData+"", true, {from: accounts[0]});
+    // const secondTestTokenServeTxtransactionLenght = await contract.transactionLength(testTokenServeTxId);
+    // const secondTestTokenServeTxtransactionConfirmCount = await contract.transactionConfirmCount(testTokenServeTxId, secondTestTokenServeTxtransactionLenght.valueOf() - 1);
+
+    // await contract.confirmTx(testTokenServeTxId, {from:accounts[2]});
+    // await contract.confirmTx(testTokenServeTxId, {from:accounts[3]});
+    // await contract.confirmTx(testTokenServeTxId, {from:accounts[1]});
+    // const addressBalance = await testToken.balanceOf(""+contract.address+"");
+
+    // assert.equal(serveConfirms.valueOf(),1,"should be 0 confirms since accounts[2] revoked!");
+    // assert.equal(serveConfirmsAfterReConfirm.valueOf(),2,"Should be 1 confirms since accounts[2] reconfirmed!");
+    // assert.equal(firstRealBalance, 100, "100 ether should be transferred to the wallet from accounts[5]");
+    // assert.equal(thirdRealBalance, 100, "No ether should be sent until 4 confirms");
+    // assert.equal(fourthRealBalance, 40, "60 ether should be transferred to accounts[5] from the wallet with 4 sigs");
+    // assert.equal(testTokenTransactionConfirmCount.valueOf(), 1, "Confirmation count should be one b/c accounts[2] has not confirmed");
+    // assert.equal(secondTestTokenServeTxtransactionConfirmCount.valueOf(), 1, "Confirmation count should be one b/c accounts[0] has already confirmed");
+    // assert.equal(addressBalance.valueOf(), 3, "3 tokens should be transferred to accounts[5] after 4 sigs");
+
+  // });
+
   it("should create contract after appropriate number of sigs, no target, and proper data", async () => {
     const data  = "0x6060604052341561000f57600080fd5b5b6103108061001f6000396000f300606060405263ffffffff60e060020a6000350416631d3b9edf811461004557806366098d4f1461006d578063e39bbf6814610095578063f4f3bdc1146100bd575b600080fd5b6100536004356024356100e5565b604051911515825260208201526040908101905180910390f35b610053600435602435610159565b604051911515825260208201526040908101905180910390f35b6100536004356024356101cd565b604051911515825260208201526040908101905180910390f35b610053600435602435610247565b604051911515825260208201526040908101905180910390f35b600082820282158382048514176100fe57506001905060005b8115610151576000805160206102c58339815191526040516020808252601390820152606860020a7274696d65732066756e63206f766572666c6f77026040808301919091526060909101905180910390a15b5b9250929050565b600082820182810384148382111661017357506001905060005b8115610151576000805160206102c58339815191526040516020808252601290820152607060020a71706c75732066756e63206f766572666c6f77026040808301919091526060909101905180910390a15b5b9250929050565b60008082156101e85750818304806020604051015260408051f35b6000805160206102c58339815191526040516020808252601790820152604860020a76747269656420746f20646976696465206279207a65726f026040808301919091526060909101905180910390a1506001905060005b9250929050565b60008183038083018414848210828614171660011461026857506001905060005b8115610151576000805160206102c58339815191526040516020808252601490820152606060020a736d696e75732066756e6320756e646572666c6f77026040808301919091526060909101905180910390a15b5b925092905056004eb9487277c052fc38bc53c91e4af51b26a1e7600aa1761ef9d2973180cf72a7a165627a7a72305820816921a222288d2b0efcc39a7dfdda6552de32e026d6a7f8b9e335dab1871dcb0029";
 

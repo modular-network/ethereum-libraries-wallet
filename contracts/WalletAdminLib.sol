@@ -209,7 +209,7 @@ library WalletAdminLib {
                        address _to,
                        bool _confirm,
                        bytes _data)
-                       public
+                       external
                        returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeOwner",_from,_to);
@@ -257,7 +257,7 @@ library WalletAdminLib {
                     address _newOwner,
                     bool _confirm,
                     bytes _data)
-                    public
+                    external
                     returns (bool,bytes32)
   {
     bytes32 _id = keccak256("addOwner",_newOwner);
@@ -303,7 +303,7 @@ library WalletAdminLib {
                        address _ownerRemoving,
                        bool _confirm,
                        bytes _data)
-                       public
+                       external
                        returns (bool,bytes32)
   {
     bytes32 _id = keccak256("removeOwner",_ownerRemoving);
@@ -351,7 +351,7 @@ library WalletAdminLib {
                                uint256 _requiredAdmin,
                                bool _confirm,
                                bytes _data)
-                               public
+                               external
                                returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeRequiredAdmin",_requiredAdmin);
@@ -396,7 +396,7 @@ library WalletAdminLib {
                                uint256 _requiredMajor,
                                bool _confirm,
                                bytes _data)
-                               public
+                               external
                                returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeRequiredMajor",_requiredMajor);
@@ -441,7 +441,7 @@ library WalletAdminLib {
                                uint256 _requiredMinor,
                                bool _confirm,
                                bytes _data)
-                               public
+                               external
                                returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeRequiredMinor",_requiredMinor);
@@ -488,7 +488,7 @@ library WalletAdminLib {
                                 uint256 _majorThreshold,
                                 bool _confirm,
                                 bytes _data)
-                                public
+                                external
                                 returns (bool,bytes32)
   {
     bytes32 _id = keccak256("changeMajorThreshold", _token, _majorThreshold);
