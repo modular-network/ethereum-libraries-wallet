@@ -123,26 +123,18 @@ library WalletGetterLib {
   function getTransactionConfirms(WalletMainLib.WalletData storage self,
                                   bytes32 _id,
                                   uint256 _txIndex)
-                                  public view returns (uint256[50])
+                                  public view returns (address[50])
   {
-    uint256[50] memory tc;
-    for(uint256 i = 0; i<self.transactionInfo[_id][_txIndex].confirmedOwners.length; i++){
-      tc[i] = self.transactionInfo[_id][_txIndex].confirmedOwners[i];
+    address[50] memory tc;
+    uint256 j = 0;
+
+    for(uint256 i = 0; i<self.owners.length; i++){
+      if (self.transactionInfo[_id][_txIndex].confirmedOwners[self.owners[i]]) {
+        tc[j] = self.owners[i];
+        j++;
+      }
     }
     return tc;
-  }
-
-  /// @dev Retrieve tx confirmation count
-  /// @param self Wallet in contract storage
-  /// @param _id ID of transaction requested
-  /// @param _txIndex The transaction index number
-  /// @return uint256 Returns the current number of tx confirmations
-  function getTransactionConfirmCount(WalletMainLib.WalletData storage self,
-                           bytes32 _id,
-                           uint256 _txIndex)
-                           public view returns(uint256)
-  {
-    return self.transactionInfo[_id][_txIndex].confirmCount;
   }
 
   /// @dev Retrieve if transaction was successful

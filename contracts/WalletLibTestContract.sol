@@ -26,7 +26,7 @@ contract WalletLibTestContract {
   event LogTransactionComplete(bytes32 txid, address target, uint256 value, bytes data);
   event LogContractCreated(address newContract, uint256 value);
 
-  function WalletLibTestContract() public {
+  constructor() public {
     address[] memory _owners = new address[](5);
     _owners[0] = 0xb4e205cd196bbe4b1b3767a5e32e15f50eb79623;
     _owners[1] = 0x40333d950b4c682e8aad143c216af52877d828bf;
@@ -82,7 +82,7 @@ contract WalletLibTestContract {
     return wallet.getTransactionLength(_id);
   }
 
-  function transactionConfirms(bytes32 _id, uint256 _txIndex) public view returns (uint256[50]) {
+  function transactionConfirms(bytes32 _id, uint256 _txIndex) public view returns (address[50]) {
     return wallet.getTransactionConfirms(_id, _txIndex);
   }
 
